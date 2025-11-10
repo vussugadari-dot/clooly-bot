@@ -6,7 +6,7 @@ import random
 import string
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, ConversationHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
 # Конфигурация
 BOT_TOKEN = "8408592358:AAHKXpGEF5xypy6wuHPdzFO3F4r0TkomnJk"
@@ -57,7 +57,7 @@ def is_admin(user_id):
     return user_id == ADMIN_ID
 
 # Команда /start
-def start(update: Update, context):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if is_admin(user_id):
@@ -68,7 +68,7 @@ def start(update: Update, context):
             [InlineKeyboardButton("📊 Статистика", callback_data='stats')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        update.message.reply_text(
+        await update.message.reply_text(
             "🎯 *CLOOLY Manager*\n\n"
             "Админ-панель управления сертификатами.\n"
             "Выберите действие:",
@@ -76,7 +76,7 @@ def start(update: Update, context):
             parse_mode='Markdown'
         )
     else:
-        update.message.reply_text(
+        await update.message.reply_text(
             "👋 Привет!\n\n"
             "Получил сертификат CLOOLY?\n"
             "Просто отправь мне код (например: CLO-1234)\n\n"
@@ -84,20 +84,20 @@ def start(update: Update, context):
         )
 
 # Обработка кнопок
-def button_handler(update: Update, context):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    query.answer()
+    await query.answer()
     
     user_id = query.from_user.id
     
     if not is_admin(user_id):
-        query.message.reply_text("❌ Доступ запрещен")
+        await query.message.reply_text("❌ Доступ запрещен")
         return ConversationHandler.END
     
     data = query.data
     
     if data == 'new_cert':
-        query.message.reply_text(
+        await query.message.reply_text(
             "➕ *Создание нового сертификата*\n\n"
             "Введите ФИО клиента:",
             parse_mode='Markdown'
@@ -105,35 +105,35 @@ def button_handler(update: Update, context):
         return NAME
     
     elif data == 'list_certs':
-        list_certificates(query.message)
+        await list_certificates(query.message)
         return ConversationHandler.END
     
     elif data == 'manage_trainers':
-        manage_trainers(query.message)
+        await manage_trainers(query.message)
         return ConversationHandler.END
     
     elif data == 'stats':
-        show_stats(query.message)
+        await show_stats(query.message)
         return ConversationHandler.END
     
     elif data == 'add_trainer':
-        query.message.reply_text("Введите данные тренера в формате:\n\nИмя | Телефон | Город\n\nНапример:\nАхмед Магомедов | +79991234567 | Махачкала")
+        await query.message.reply_text("Введите данные тренера в формате:\n\nИмя | Телефон | Город\n\nНапример:\nАхмед Магомедов | +79991234567 | Махачкала")
         return ConversationHandler.END
 
 # Создание сертификата - шаг 1: имя
-def get_name(update: Update, context):
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['client_name'] = update.message.text
-    update.message.reply_text("📱 Введите телефон клиента:")
+    await update.message.reply_text("📱 Введите телефон клиента:")
     return PHONE
 
 # Создание сертификата - шаг 2: телефон
-def get_phone(update: Update, context):
+async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['client_phone'] = update.message.text
-    update.message.reply_text("🏙 Введите город клиента:")
+    await update.message.reply_text("🏙 Введите город клиента:")
     return CITY
 
 # Создание сертификата - шаг 3: город
-def get_city(update: Update, context):
+async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     city = update.message.text
     context.user_data['city'] = city
     
@@ -183,13 +183,13 @@ def get_city(update: Update, context):
     else:
         message += "⚠️ Тренер в городе не найден - статус 'В поиске'\n"
     
-    update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message, parse_mode='Markdown')
     
     context.user_data.clear()
     return ConversationHandler.END
 
 # Список всех сертификатов
-def list_certificates(message):
+async def list_certificates(message):
     conn = sqlite3.connect('clooly.db')
     c = conn.cursor()
     c.execute("SELECT code, client_name, city, status FROM certificates ORDER BY id DESC LIMIT 20")
@@ -197,7 +197,7 @@ def list_certificates(message):
     conn.close()
     
     if not certs:
-        message.reply_text("📋 Сертификатов пока нет")
+        await message.reply_text("📋 Сертификатов пока нет")
         return
     
     text = "📋 *Последние 20 сертификатов:*\n\n"
@@ -206,10 +206,10 @@ def list_certificates(message):
         emoji = "✅" if status == "Выдан" else "🔍" if status == "В поиске тренера" else "🎯"
         text += f"{emoji} `{code}` - {name} ({city})\n"
     
-    message.reply_text(text, parse_mode='Markdown')
+    await message.reply_text(text, parse_mode='Markdown')
 
 # Управление тренерами
-def manage_trainers(message):
+async def manage_trainers(message):
     conn = sqlite3.connect('clooly.db')
     c = conn.cursor()
     c.execute("SELECT name, contact, city FROM trainers")
@@ -226,10 +226,10 @@ def manage_trainers(message):
     keyboard = [[InlineKeyboardButton("➕ Добавить тренера", callback_data='add_trainer')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    await message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
 # Статистика
-def show_stats(message):
+async def show_stats(message):
     conn = sqlite3.connect('clooly.db')
     c = conn.cursor()
     
@@ -259,10 +259,10 @@ def show_stats(message):
         f"👥 Тренеров в базе: {trainers_count}"
     )
     
-    message.reply_text(text, parse_mode='Markdown')
+    await message.reply_text(text, parse_mode='Markdown')
 
 # Обработка текстовых сообщений
-def handle_message(update: Update, context):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     user_id = update.effective_user.id
     
@@ -305,9 +305,9 @@ def handle_message(update: Update, context):
                 conn.commit()
                 conn.close()
             
-            update.message.reply_text(message, parse_mode='Markdown')
+            await update.message.reply_text(message, parse_mode='Markdown')
         else:
-            update.message.reply_text("❌ Сертификат не найден. Проверь код!")
+            await update.message.reply_text("❌ Сертификат не найден. Проверь код!")
     
     # Добавление тренера
     elif "|" in text and is_admin(user_id):
@@ -322,18 +322,18 @@ def handle_message(update: Update, context):
             conn.commit()
             conn.close()
             
-            update.message.reply_text(
+            await update.message.reply_text(
                 f"✅ Тренер добавлен!\n\n"
                 f"👨‍🏫 {name}\n"
                 f"📞 {contact}\n"
                 f"🏙 {city}"
             )
         else:
-            update.message.reply_text("❌ Неверный формат. Используй:\nИмя | Телефон | Город")
+            await update.message.reply_text("❌ Неверный формат. Используй:\nИмя | Телефон | Город")
 
 # Отмена
-def cancel(update: Update, context):
-    update.message.reply_text("❌ Создание сертификата отменено")
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Создание сертификата отменено")
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -341,28 +341,27 @@ def cancel(update: Update, context):
 def main():
     init_db()
     
-    updater = Updater(BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
+    application = Application.builder().token(BOT_TOKEN).build()
     
     # ConversationHandler для создания сертификата
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_handler, pattern='^new_cert$')],
         states={
-            NAME: [MessageHandler(Filters.text & ~Filters.command, get_name)],
-            PHONE: [MessageHandler(Filters.text & ~Filters.command, get_phone)],
-            CITY: [MessageHandler(Filters.text & ~Filters.command, get_city)],
+            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
+            CITY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_city)],
         },
-        fallbacks=[CommandHandler('cancel', cancel)]
+        fallbacks=[CommandHandler('cancel', cancel)],
+        per_message=False
     )
     
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(conv_handler)
-    dp.add_handler(CallbackQueryHandler(button_handler))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(conv_handler)
+    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("🤖 Бот запущен!")
-    updater.start_polling()
-    updater.idle()
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     main()
